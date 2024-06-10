@@ -1,7 +1,5 @@
 #pragma once
 
-const uint8_t g_AppID = 183;
-const int g_eeprom_address = 0;
 long g_storeTime = millis();
 
 bool g_voltagePinConnnected = false;
@@ -17,6 +15,8 @@ bool g_sMeterOn = false;
 bool g_displayOn = true;
 bool g_displayRDS = false;
 bool g_rdsSwitchPressed = false;
+bool g_seekStop = false;
+uint32_t g_lastAdjustmentTime = 0;
 
 uint8_t g_muteVolume = 0;
 int g_currentBFO = 0;
@@ -65,22 +65,37 @@ void doSWUnits(int8_t v = 0);
 void doSSBSoftMuteMode(int8_t v = 0);
 void doCutoffFilter(int8_t v);
 void doCPUSpeed(int8_t v = 0);
+#if USE_RDS
 void doRDSErrorLevel(int8_t v);
+#endif
+void doBFOCalibration(int8_t v);
+void doUnitsSwitch(int8_t v = 0);
+void doScanSwitch(int8_t v = 0);
+void doCWSwitch(int8_t v = 0);
 
 SettingsItem g_Settings[] =
 {
+    //Page 1
     { "ATT", 0,  SettingType::ZeroAuto,     doAttenuation     },  //Attenuation
     { "SM ", 0,  SettingType::Num,          doSoftMute        },  //Soft Mute
     { "SVC", 1,  SettingType::Switch,       doSSBAVC          },  //SSB AVC Switch
     { "Syn", 0,  SettingType::Switch,       doSync            },  //SSB Sync
     { "DeE", 1,  SettingType::Switch,       doDeEmp           },  //FM DeEmphasis (0 - 50, 1 - 75)
     { "AVC", 46, SettingType::Num,          doAvc             },  //Automatic Volume Control
+    //Page 2
     { "Scr", 80, SettingType::Num,          doBrightness      },  //Screen Brightness
     { "SW ", 0,  SettingType::Switch,       doSWUnits         },  //SW Units
     { "SSM", 1,  SettingType::Switch,       doSSBSoftMuteMode },  //SSB Soft Mute Mode
     { "COF", 0,  SettingType::SwitchAuto,   doCutoffFilter    },  //SSB Cutoff Filter
     { "CPU", 0,  SettingType::Switch,       doCPUSpeed        },  //CPU Frequency
+#if USE_RDS
     { "RDS", 1,  SettingType::Num,          doRDSErrorLevel   },  //RDS ErrorLevel
+#endif
+    //Page 3
+    { "BFO", 0,  SettingType::Num,          doBFOCalibration  },  //BFO Offset calibration
+    { "Uni", 1,  SettingType::Switch,       doUnitsSwitch     },  //Show/Hide frequency units
+    { "Sca", 1,  SettingType::Switch,       doScanSwitch      },  //AM Encoder scan switch
+    { "CW ", 0,  SettingType::Switch,       doCWSwitch        },  //CW is LSB or USB
 };
 
 enum SettingsIndex
@@ -96,11 +111,17 @@ enum SettingsIndex
     SSM,
     CutoffFilter,
     CPUSpeed,
+#if USE_RDS
     RDSError,
+#endif
+    BFO,
+    UnitsSwitch,
+    ScanSwitch,
+    CWSwitch,
     SETTINGS_MAX
 };
 
-const uint8_t g_SettingsMaxPages = 2;
+const uint8_t g_SettingsMaxPages = 3;
 int8_t g_SettingSelected = 0;
 int8_t g_SettingsPage = 1;
 bool g_SettingEditing = false;
@@ -122,6 +143,7 @@ Bandwidth g_bandwidthSSB[] =
     { 2, "3.0k" },
     { 3, "4.0k" }
 };
+const uint8_t g_bwSSBMaxIdx = 5;
 
 int8_t g_bwIndexAM = 4;
 const uint8_t g_maxFilterAM = 6;
@@ -137,13 +159,13 @@ Bandwidth g_bandwidthAM[] =
 };
 
 int8_t g_bwIndexFM = 0;
-Bandwidth g_bandwidthFM[] =
+char* g_bandwidthFM[] =
 {
-    { 0, "AUTO" },
-    { 1, "110k" },
-    { 2, " 84k" },
-    { 3, " 60k" },
-    { 4, " 40k" }
+    "AUTO",
+    "110k",
+    " 84k",
+    " 60k",
+    " 40k"
 };
 
 int g_tabStep[] =
@@ -189,7 +211,6 @@ enum BandType : uint8_t
 
 struct Band
 {
-    BandType bandType;
     uint16_t minimumFreq;
     uint16_t maximumFreq;
     uint16_t currentFreq;
@@ -197,6 +218,7 @@ struct Band
     int8_t bandwidthIdx;     // Bandwidth table index (internal table in Si473x controller)
 };
 
+#if USE_RDS
 enum RDSActiveInfo : uint8_t
 {
     StationName,
@@ -206,8 +228,8 @@ enum RDSActiveInfo : uint8_t
 uint8_t g_rdsActiveInfo = RDSActiveInfo::StationName;
 char g_rdsPrevLen = 0;
 char* g_RDSCells[3];
+#endif
 
-char _literal_SW[3] = "SW"; //To reduce binary image size
 char _literal_EmptyLine[17] = "                ";
 
 char* bandTags[] =
@@ -220,31 +242,35 @@ char* bandTags[] =
 
 Band g_bandList[] =
 {
-    { LW_BAND_TYPE, LW_LIMIT_LOW, 520, 300, 0, 4 },
-    { MW_BAND_TYPE, 520, 1710, 1476, 3, 4 },
-    { SW_BAND_TYPE, SW_LIMIT_LOW, 3500, 1900, 0, 4 },     // 160 Meter
-    { SW_BAND_TYPE, 3500, 4500, 3700, 0, 5 },     // 80 Meter
-    { SW_BAND_TYPE, 4500, 5600, 4850, 1, 4 },
-    { SW_BAND_TYPE, 5600, 6800, 6000, 1, 4 },
-    { SW_BAND_TYPE, 6800, 7300, 7100, 0, 4 },     // 40 Meter
-    { SW_BAND_TYPE, 7200, 8500, 7200, 1, 4 },     // 41 Meter
-    { SW_BAND_TYPE, 8500, 10000, 9604, 1, 4 },
-    { SW_BAND_TYPE, 10000, 11200, 10100, 0, 4 },  // 30 Meter
-    { SW_BAND_TYPE, 11200, 12500, 11940, 1, 4 },
-    { SW_BAND_TYPE, 13400, 13900, 13600, 1, 4 },
-    { SW_BAND_TYPE, 14000, 14500, 14200, 0, 4 },  // 20 Meter
-    { SW_BAND_TYPE, 15000, 15900, 15300, 1, 4 },
-    { SW_BAND_TYPE, 17200, 17900, 17600, 1, 4 },
-    { SW_BAND_TYPE, 18000, 18300, 18100, 0, 4 },  // 17 Meter
-    { SW_BAND_TYPE, 21000, 21400, 21200, 0, 4 },  // 15 Meter
-    { SW_BAND_TYPE, 21400, 21900, 21500, 1, 4 },  // 13 Meter
-    { SW_BAND_TYPE, 24890, 26200, 24940, 0, 4 },  // 12 Meter
-    { SW_BAND_TYPE, 26200, 28000, 27500, 0, 4 },  // CB Band (11 Meter)
-    { SW_BAND_TYPE, 28000, SW_LIMIT_HIGH, 28400, 0, 4 },  // 10 Meter
-    { FM_BAND_TYPE, 6400, 10800, 7000, 1, 0 },
-    { FM_BAND_TYPE, 8400, 10800, 10570, 1, 0 },
+    /* LW */ { LW_LIMIT_LOW, 520, 300, 0, 4 },
+    /* MW */ { 520, 1710, 1476, 3, 4 },
+    /* SW */ { SW_LIMIT_LOW, SW_LIMIT_HIGH, SW_LIMIT_LOW, 0, 4 },
+    /* FM */ { 6400, 10800, 8400, 1, 0 },
 };
 
+uint16_t SWSubBands[] =
+{
+    SW_LIMIT_LOW,  // 160 Meter
+    3500, // 80 Meter
+    4500, 
+    5600,
+    6800, // 40 Meter
+    7200, // 41 Meter
+    8500, 
+    10000, // 30 Meter
+    11200,
+    13400, 
+    14000, // 20 Meter
+    15000,
+    17200, 
+    18000, // 17 Meter
+    21000, // 15 Meter
+    21400, // 13 Meter
+    24890, // 12 Meter
+    CB_LIMIT_LOW, // CB Band (11 Meter)
+    CB_LIMIT_HIGH  // 10 Meter
+};
+const uint8_t g_SWSubBandCount = sizeof(SWSubBands) / sizeof(uint16_t);
 const uint8_t g_lastBand = (sizeof(g_bandList) / sizeof(Band)) - 1;
 int8_t g_bandIndex = 1;
 
