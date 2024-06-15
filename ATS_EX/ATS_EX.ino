@@ -71,8 +71,8 @@ void setup()
     PORTD |= (1 << ENCODER_PIN_A);
     DDRD &= ~(1 << ENCODER_PIN_B);
     PORTD |= (1 << ENCODER_PIN_B);
-    
-    g_voltagePinConnnected = analogRead(BATTERY_VOLTAGE_PIN) > 300;
+    analogReference(INTERNAL);
+    g_voltagePinConnnected = analogRead(BATTERY_VOLTAGE_PIN) > 500;
 
     oled.begin(128, 64, sizeof(tiny4koled_init_128x64br), tiny4koled_init_128x64br);
     oled.clear();
@@ -718,71 +718,59 @@ void showCharge(bool forceShow)
     if (!g_voltagePinConnnected)
         return;
 
-    // mV, Percent
-    //This values represent voltage values in ATMega328p analog units with reference voltage 3.30v
-    //Voltage pin reads voltage from voltage divider, so it have to be 1/2 of Li-Ion battery voltage
-    constexpr const uint8_t rows = 10;
-    const uint16_t dischargeTable[rows][2] =
-    {
-        { 643, 100 },  //4.15v
-        { 620, 95  },  //4.05v
-        { 604, 90  },  //3.90v
-        { 581, 80  },  //3.75v
-        { 573, 60  },  //3.70v
-        { 558, 40  },  //3.60v
-        { 542, 20  },  //3.50v
-        { 503, 15  },  //3.25v
-        { 496, 5  },   //3.20v
-        { 488, 0  },   //3.15v
-    };
-
-    auto getBatteryPercentage = [&](uint16_t currentSamples) -> uint8_t
-    {
-        if (currentSamples >= dischargeTable[0][0]) 
-            return 100;
-
-        if (currentSamples <= dischargeTable[rows - 1][0]) 
-            return 0;
-
-        for (uint8_t i = 0; i < rows - 1; ++i) 
-        {
-            if (currentSamples >= dischargeTable[i + 1][0] && currentSamples <= dischargeTable[i][0]) 
-            {
-                uint16_t voltageDiff = dischargeTable[i][0] - dischargeTable[i + 1][0];
-                uint16_t percentageDiff = dischargeTable[i][1] - dischargeTable[i + 1][1];
-                uint16_t voltageOffset = currentSamples - dischargeTable[i + 1][0];
-                return dischargeTable[i + 1][1] + (percentageDiff * voltageOffset + voltageDiff / 2) / voltageDiff;
-            }
-        }
-
-        return 0;
-    };
-
+    /*
+    Using internal voltage reference from 1.1 V to prevent variation from AREF
+    analogReference(INTERNAL);
+    K = 1.1 / 1024
+    Vo = AD * K
+    AD = Vo / K
+    Vo = Vi * (R2 / (R1 + R2))
+    Vi -> Connected after power switch to read battery voltage
+    Vi --
+        |
+        R1
+        |
+        ---- Vo
+        |
+        R2
+        |
+        GND
+    R1 = 10K 
+    R2 = 2K7
+    K = 0.001
+    Vo = Vi * 0.213
+    Vi = 3.2 V -> Vo = 0.682 -> AD = 682
+    Vi = 4.0 V -> Vo = 0.852 -> AD = 852
+    */
+    const uint16_t chargeFull = 788; // 4v
+    const uint16_t chargeLow = 682;  // 3.2v
     static uint32_t lastChargeShow = 0;
     static int16_t averageSamples = 0;
 
     int sample = analogRead(BATTERY_VOLTAGE_PIN);
     if (sample < 0)
         sample = averageSamples;
-
+    sample = (sample > chargeFull) ? chargeFull : sample;
     if ((millis() - lastChargeShow) > 10000 || forceShow)
     {
         char buf[4];
         buf[3] = 0;
-        int16_t percents = getBatteryPercentage(averageSamples);
-
+        int16_t percents = (((averageSamples - chargeLow) * 100) / (chargeFull - chargeLow));
         uint8_t il = ilen(percents) < 3 ? 2 : 3;
         convertToChar(buf, percents, il);
-
         if (il < 3)
             buf[2] = '%';
-
+        if (averageSamples < (chargeLow - 20))
+        {
+            buf[0] = '-';
+            buf[1] = '-';
+            buf[2] = '-';
+        }
         if (!g_settingsActive && !g_sMeterOn && !g_displayRDS)
             oledPrint(buf, 102, 6, DEFAULT_FONT);
         lastChargeShow = millis();
         averageSamples = sample;
     }
-
     averageSamples = (averageSamples + sample) / 2;
 }
 
