@@ -71,6 +71,7 @@ void setup()
     PORTD |= (1 << ENCODER_PIN_A);
     DDRD &= ~(1 << ENCODER_PIN_B);
     PORTD |= (1 << ENCODER_PIN_B);
+    
     g_voltagePinConnnected = analogRead(BATTERY_VOLTAGE_PIN) > 300;
 
     oled.begin(128, 64, sizeof(tiny4koled_init_128x64br), tiny4koled_init_128x64br);
@@ -96,8 +97,8 @@ void setup()
         oledPrint(" ATS-20 RECEIVER", 0, 0, DEFAULT_FONT, true);
         oledPrint("ATS_EX v1.18", 16, 2);
         oledPrint("Goshante 2024", 12, 4);
-        oledPrint("Best firmware", 12, 6);
-        delay(2000);
+         oledPrint(" PP5MGT mods", 0, 6);
+        delay(1000);
     }
     oled.clear();
 
@@ -1051,7 +1052,7 @@ void setRDSConfig(uint8_t bias)
 //Update receiver settings after changing band and modulation
 void applyBandConfiguration(bool extraSSBReset = false)
 {
-    g_si4735.setTuneFrequencyAntennaCapacitor(uint16_t(g_bandIndex == SW_BAND_TYPE));
+    g_si4735.setTuneFrequencyAntennaCapacitor(uint16_t(g_bandIndex == SW_BAND_TYPE || g_bandIndex == MW_BAND_TYPE || g_bandIndex == LW_BAND_TYPE));
     if (g_bandIndex == FM_BAND_TYPE)
     {
         g_currentMode = FM;
@@ -1572,6 +1573,8 @@ void doFrequencyTuneSSB()
         agcSetFunc(); //Re-apply to remove noize
         g_currentFrequency = g_si4735.getFrequency();
         g_bandList[g_bandIndex].currentFreq = g_currentFrequency;
+        // FIX: change audio level when ATT != AUT
+        agcSetFunc();
     }
 
     g_bandList[g_bandIndex].currentFreq = g_currentFrequency + (g_currentBFO / 1000);
