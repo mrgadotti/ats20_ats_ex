@@ -708,7 +708,7 @@ void showCharge(bool forceShow)
     Vi = 3.2 V -> Vo = 0.682 -> AD = 682
     Vi = 4.0 V -> Vo = 0.852 -> AD = 852
     */
-    const uint16_t chargeFull = 852; // 4v
+    const uint16_t chargeFull = 788; // 3.8v
     const uint16_t chargeLow = 682;  // 3.2v
     static uint32_t lastChargeShow = 0;
     static int16_t averageSamples = 0;
@@ -735,6 +735,13 @@ void showCharge(bool forceShow)
             buf[0] = '-';
             buf[1] = '-';
             buf[2] = '-';
+        }
+
+         if (averageSamples > (chargeFull + 10) )
+        {
+            buf[0] = '+';
+            buf[1] = '+';
+            buf[2] = '+';
         }
 
         if (!g_settingsActive && !g_sMeterOn && !g_displayRDS)
