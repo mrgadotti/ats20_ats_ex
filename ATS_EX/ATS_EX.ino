@@ -97,8 +97,8 @@ void setup()
         oledPrint(" ATS-20 RECEIVER", 0, 0, DEFAULT_FONT, true);
         oledPrint("ATS_EX v1.18", 16, 2);
         oledPrint("Goshante 2024", 12, 4);
-         oledPrint(" PP5MGT mods", 0, 6);
-        delay(1000);
+        oledPrint("Best firmware", 12, 6);
+        delay(2000);
     }
     oled.clear();
 
@@ -1040,7 +1040,10 @@ void setRDSConfig(uint8_t bias)
 //Update receiver settings after changing band and modulation
 void applyBandConfiguration(bool extraSSBReset = false)
 {
-    g_si4735.setTuneFrequencyAntennaCapacitor(uint16_t(g_bandIndex == SW_BAND_TYPE || g_bandIndex == MW_BAND_TYPE || g_bandIndex == LW_BAND_TYPE));
+    /*  Replace the antenna capacitor in LW/MW with the same SW value and
+    you will get better results on active antennas and wire antennas */
+    g_si4735.setTuneFrequencyAntennaCapacitor(uint16_t(g_bandIndex == SW_BAND_TYPE 
+        || g_bandIndex == MW_BAND_TYPE || g_bandIndex == LW_BAND_TYPE));
     if (g_bandIndex == FM_BAND_TYPE)
     {
         g_currentMode = FM;
@@ -1175,6 +1178,7 @@ void doStep(int8_t v)
 void updateBFO()
 {
     //Actually to move frequency forward you need to move BFO backwards, so just * -1
+    // Some receiver increase frequency offset on higher frequencies and need a bigger range on BFO
     g_si4735.setSSBBfo((g_currentBFO + (g_Settings[SettingsIndex::BFO].param * 50)) * -1);
 }
 
