@@ -17,8 +17,15 @@
 #define RST_PIN -1
 #define RESET_PIN 12
 
-//Battery charge monitoring analog pin (Voltage divider 10-10 KOhm directly from battery)
+//Battery charge monitoring analog pin (voltage divider directly from battery)
+//The ADC uses the internal 1.1v reference, so the divider must keep the pin below 1.1v at full charge (4.2v)
+//Top resistor goes to battery +, bottom resistor goes to GND, the middle point goes to the pin
 #define BATTERY_VOLTAGE_PIN A2
+#define BATTERY_DIVIDER_TOP_OHM 10000UL
+#define BATTERY_DIVIDER_BOTTOM_OHM 2700UL
+#define BATTERY_ADC_REF_MV 1100UL
+//Converts battery voltage in mV to ADC units
+#define BATTERY_MV_TO_ADC(mv) ((uint16_t)(((mv) * BATTERY_DIVIDER_BOTTOM_OHM * 1024UL) / ((BATTERY_DIVIDER_TOP_OHM + BATTERY_DIVIDER_BOTTOM_OHM) * BATTERY_ADC_REF_MV)))
 
 // Encoder
 #define ENCODER_PIN_A 2

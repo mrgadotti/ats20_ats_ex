@@ -117,7 +117,9 @@ void setup()
     PORTB |= buttonsB;
     DDRC &= ~buttonsC;
     PORTC |= buttonsC;
-    g_voltagePinConnnected = analogRead(BATTERY_VOLTAGE_PIN) > 300;
+    analogReference(INTERNAL);
+    analogRead(BATTERY_VOLTAGE_PIN); //First reading after switching the reference is unreliable
+    g_voltagePinConnnected = analogRead(BATTERY_VOLTAGE_PIN) > BATTERY_MV_TO_ADC(1900UL);
 
     oled.begin(128, 64, sizeof(tiny4koled_init_128x64br), tiny4koled_init_128x64br);
     oled.clear();
@@ -695,29 +697,28 @@ void showVolume()
 
 //Draw battery charge
 //This feature requires hardware mod
-//Voltage divider made of two 10 KOhm resistors between + and GND of Li-Ion battery
-//Solder it to A2 analog pin
+//Voltage divider between + and GND of Li-Ion battery (see defs.h for resistor values)
+//Solder its middle point to A2 analog pin
 void showCharge(bool forceShow)
 {
     if (!g_voltagePinConnnected)
         return;
 
-    // mV, Percent
-    //This values represent voltage values in ATMega328p analog units with reference voltage 3.30v
-    //Voltage pin reads voltage from voltage divider, so it have to be 1/2 of Li-Ion battery voltage
+    // ADC units, Percent
+    //Battery voltage converted to ATMega328p analog units (internal 1.1v reference, divider from defs.h)
     constexpr const uint8_t rows = 10;
-    const uint16_t dischargeTable[rows][2] =
+    static const uint16_t dischargeTable[rows][2] =
     {
-        { 643, 100 },  //4.15v
-        { 620, 95  },  //4.05v
-        { 604, 90  },  //3.90v
-        { 581, 80  },  //3.75v
-        { 573, 60  },  //3.70v
-        { 558, 40  },  //3.60v
-        { 542, 20  },  //3.50v
-        { 503, 15  },  //3.25v
-        { 496, 5  },   //3.20v
-        { 488, 0  },   //3.15v
+        { BATTERY_MV_TO_ADC(4150UL), 100 },  //4.15v
+        { BATTERY_MV_TO_ADC(4050UL), 95  },  //4.05v
+        { BATTERY_MV_TO_ADC(3900UL), 90  },  //3.90v
+        { BATTERY_MV_TO_ADC(3750UL), 80  },  //3.75v
+        { BATTERY_MV_TO_ADC(3700UL), 60  },  //3.70v
+        { BATTERY_MV_TO_ADC(3600UL), 40  },  //3.60v
+        { BATTERY_MV_TO_ADC(3500UL), 20  },  //3.50v
+        { BATTERY_MV_TO_ADC(3250UL), 15  },  //3.25v
+        { BATTERY_MV_TO_ADC(3200UL), 5  },   //3.20v
+        { BATTERY_MV_TO_ADC(3150UL), 0  },   //3.15v
     };
 
     auto getBatteryPercentage = [&](uint16_t currentSamples) -> uint8_t
@@ -760,6 +761,10 @@ void showCharge(bool forceShow)
 
         if (il < 3)
             buf[2] = '%';
+
+        //Too low voltage (e.g. USB powered without battery)
+        if (averageSamples < BATTERY_MV_TO_ADC(3000UL))
+            buf[0] = buf[1] = buf[2] = '-';
 
         if (!g_settingsActive && !g_sMeterOn && !g_displayRDS)
             oledPrint(buf, 102, 6, DEFAULT_FONT);
@@ -1081,7 +1086,9 @@ void setRDSConfig(uint8_t bias)
 void applyBandConfiguration(bool extraSSBReset = false)
 {
     Band& band = g_bandList[g_bandIndex];
-    g_si4735.setTuneFrequencyAntennaCapacitor(uint16_t(g_bandIndex == SW_BAND_TYPE));
+    //Using the same capacitor value as SW in LW/MW gives better results on active and wire antennas
+    g_si4735.setTuneFrequencyAntennaCapacitor(uint16_t(g_bandIndex == SW_BAND_TYPE
+        || g_bandIndex == MW_BAND_TYPE || g_bandIndex == LW_BAND_TYPE));
     if (g_bandIndex == FM_BAND_TYPE)
     {
         g_currentMode = FM;
@@ -1217,7 +1224,8 @@ void doStep(int8_t v)
 void updateBFO()
 {
     //Actually to move frequency forward you need to move BFO backwards, so just * -1
-    g_si4735.setSSBBfo((g_currentBFO + (g_settingParam[SettingsIndex::BFO] * 10)) * -1);
+    //Some receivers increase frequency offset on higher frequencies and need a bigger range on BFO
+    g_si4735.setSSBBfo((g_currentBFO + (g_settingParam[SettingsIndex::BFO] * 50)) * -1);
 }
 
 //Volume control
@@ -1364,7 +1372,7 @@ void doCPUSpeed(int8_t v = 0)
 //Settings: BFO Offset calibration
 void doBFOCalibration(int8_t v)
 {
-    doSwitchLogic(g_settingParam[SettingsIndex::BFO], -60, 60, v);
+    doSwitchLogic(g_settingParam[SettingsIndex::BFO], -99, 99, v);
 
     if (isSSB())
     {
@@ -1604,6 +1612,7 @@ void doFrequencyTuneSSB()
         agcSetFunc(); //Re-apply to remove noize
         g_currentFrequency = g_si4735.getFrequency();
         band.currentFreq = g_currentFrequency;
+        agcSetFunc(); //Fix audio level change when ATT is not AUT
     }
 
     band.currentFreq = g_currentFrequency + (g_currentBFO / 1000);
