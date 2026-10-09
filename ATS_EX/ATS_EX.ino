@@ -56,6 +56,41 @@ int getLastStep()
     return g_amTotalSteps - 1;
 }
 
+//SW sub-bands helpers
+inline uint16_t swLow(uint8_t i)
+{
+    return pgm_read_word(&g_swSubBands[i].low) & ~HAM;
+}
+
+inline uint16_t swHigh(uint8_t i)
+{
+    return pgm_read_word(&g_swSubBands[i].high);
+}
+
+inline bool swIsHam(uint8_t i)
+{
+    return pgm_read_word(&g_swSubBands[i].low) & HAM;
+}
+
+//Frequency in KHz shown on display (BFO included)
+uint16_t getTunedFreq()
+{
+    uint16_t freq = g_currentFrequency;
+    if (isSSB())
+        freq += g_currentBFO / 1000;
+    return freq;
+}
+
+int8_t findSWSubBand(uint16_t freq)
+{
+    for (uint8_t i = 0; i < g_SWSubBandCount; i++)
+    {
+        if (freq >= swLow(i) && freq < swHigh(i))
+            return i;
+    }
+    return -1;
+}
+
 // --------------------------
 // ------- Main logic -------
 // --------------------------
@@ -128,10 +163,7 @@ void setup()
         saveAllReceiverInformation();
 
     //Clock speed configuration
-    noInterrupts(); //cli()
-    CLKPR = 0x80;   //Allow edit CLKPR register
-    CLKPR = g_settingParam[SettingsIndex::CPUSpeed];
-    interrupts();   //sei()
+    doCPUSpeed(); //Applies stored value, v = 0 does not change it
 
     //Initialize current band settings and read frequency
     applyBandConfiguration();
@@ -284,6 +316,8 @@ void saveAllReceiverInformation()
 
     for (uint8_t i = 0; i < SettingsIndex::SETTINGS_MAX; i++)
         EEPROM.update(addr++, g_settingParam[i]);
+
+    EEPROM.put(addr, g_swLastFreq);
 }
 
 //EEPROM Load
@@ -308,6 +342,9 @@ void readAllReceiverInformation()
 
     for (uint8_t i = 0; i < SettingsIndex::SETTINGS_MAX; i++)
         g_settingParam[i] = EEPROM.read(addr++);
+
+    //Invalid values (e.g. blank EEPROM) are ignored when entering a sub-band
+    EEPROM.get(addr, g_swLastFreq);
 
     oled.setContrast(uint8_t(g_settingParam[SettingsIndex::Brightness]) * 2);
 
@@ -890,41 +927,89 @@ void showBandwidth()
     oledPrintP(bw, 45, 0, DEFAULT_FONT, g_cmdBw);
 }
 
-uint16_t getNextSWSuBband(bool up)
+//Switch modulation, g_bandList[].currentFreq must be already set to the frequency to tune
+void setMode(uint8_t newMode)
 {
-    uint16_t freq = g_currentFrequency;
-    if (isSSB())
-        freq += g_currentBFO / 1000;
-
-    for (uint8_t i = 0; i < g_SWSubBandCount; i++)
+    g_prevMode = g_currentMode;
+    if (newMode == AM)
     {
-        uint8_t n = g_SWSubBandCount - 1 - i;
-        if (!up && pgm_read_word(&SWSubBands[n]) < freq)
-            return pgm_read_word(&SWSubBands[n]);
-        else if (up && pgm_read_word(&SWSubBands[i]) > freq)
-            return pgm_read_word(&SWSubBands[i]);
+        g_currentMode = AM;
+        g_ssbLoaded = false;
+        if (g_stepIndex >= g_amTotalSteps)
+            g_stepIndex = 0;
+    }
+    else
+    {
+        if (!g_ssbLoaded)
+        {
+            loadSSBPatch();
+            g_processFreqChange = false;
+        }
+        g_currentMode = newMode;
     }
 
-    return 0;
+    g_bandList[g_bandIndex].currentStepIdx = g_stepIndex;
+    applyBandConfiguration();
 }
 
 void bandSwitch(bool up)
 {
-    uint16_t nextSW = getNextSWSuBband(up);
-    
-    if (g_bandIndex == SW_BAND_TYPE && nextSW != 0)
+    if (g_bandIndex == SW_BAND_TYPE)
     {
-        g_currentFrequency = nextSW;
+        uint16_t freq = getTunedFreq();
+        int8_t cur = findSWSubBand(freq);
+        int8_t next = -1;
 
-        g_currentBFO = 0;
-        if (isSSB())
-            updateBFO();
-        g_si4735.setFrequency(nextSW);
-        agcSetFunc(); //Re-apply to remove noize
-        showFrequency();
-        showBandTag();
+        //Remember where we were in the sub-band we are leaving
+        if (cur >= 0)
+            g_swLastFreq[cur] = freq;
+
+        //Nearest sub-band above (or below) current frequency
+        for (uint8_t i = 0; i < g_SWSubBandCount; i++)
+        {
+            uint8_t j = up ? i : g_SWSubBandCount - 1 - i;
+            if (up ? swLow(j) > freq : swHigh(j) <= freq)
+            {
+                next = j;
+                break;
+            }
+        }
+
+        if (next >= 0)
+        {
+            uint16_t target = g_swLastFreq[next];
+            if (target < swLow(next) || target >= swHigh(next))
+                target = swLow(next);
+
+            //Amateur bands - SSB (keep CW if selected), leaving them - back to AM
+            uint8_t mode = g_currentMode;
+            if (swIsHam(next))
+            {
+                if (mode != CW)
+                    mode = swLow(next) < SSB_LSB_LIMIT ? LSB : USB;
+            }
+            else if (cur >= 0 && swIsHam(cur) && isSSB())
+                mode = AM;
+
+            g_currentBFO = 0;
+            g_bandList[g_bandIndex].currentFreq = target;
+            if (mode != g_currentMode)
+            {
+                setMode(mode);
+                return;
+            }
+
+            g_currentFrequency = target;
+            if (isSSB())
+                updateBFO();
+            g_si4735.setFrequency(target);
+            agcSetFunc(); //Re-apply to remove noize
+            showFrequency();
+            showBandTag();
+            return;
+        }
     }
-    else
+
     {
         if (g_currentMode == FM)
             g_bandList[g_bandIndex].currentStepIdx = g_FMStepIndex;
@@ -1357,13 +1442,11 @@ void doBandwidth(uint8_t v)
     else if (g_currentMode == AM)
     {
         doBandwidthLogic(g_bwIndexAM, g_maxFilterAM, v);
-        g_bandList[g_bandIndex].bandwidthIdx = g_bwIndexAM;
         g_si4735.setBandwidth(getBwIdx(g_bandwidthAM, g_bwIndexAM), 1);
     }
     else
     {
         doBandwidthLogic(g_bwIndexFM, 4, v);
-        g_bandList[g_bandIndex].bandwidthIdx = g_bwIndexFM;
         g_si4735.setFmBandwidth(g_bwIndexFM);
     }
     showBandwidth();
@@ -1779,38 +1862,13 @@ void loop()
             if (g_currentMode != FM)
             {
                 g_bandList[g_bandIndex].currentFreq = g_currentFrequency;
-                g_prevMode = g_currentMode;
-                switch (g_currentMode)
-                {
-                case AM:
-                    //Patch Si473x memory every time when enabling SSB
-                    loadSSBPatch();
-                    g_processFreqChange = false;
-                    //Allow pass through
-
-                case LSB:
-                    g_currentMode++;
+                if (g_currentMode != CW)
                     g_bandList[g_bandIndex].currentFreq += g_currentBFO / 1000;
-                    break;
-
-                case USB:
-                    g_currentMode++;
+                if (g_currentMode == USB)
                     g_cmdBw = false;
-                    g_bandList[g_bandIndex].currentFreq += g_currentBFO / 1000;
-                    break;
 
-                case CW:
-                    g_currentMode = AM;
-                    g_ssbLoaded = false;
-                    if (g_stepIndex >= g_amTotalSteps)
-                        g_stepIndex = 0;
-
-                    g_currentFrequency += (g_currentBFO / 1000);
-                    break;
-                }
-
-                g_bandList[g_bandIndex].currentStepIdx = g_stepIndex;
-                applyBandConfiguration();
+                //AM -> LSB -> USB -> CW -> AM. SSB patch is loaded every time when enabling SSB
+                setMode(g_currentMode == CW ? AM : g_currentMode + 1);
             }
 #if USE_RDS
             else

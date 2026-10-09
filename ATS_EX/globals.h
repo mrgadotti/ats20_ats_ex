@@ -276,29 +276,48 @@ Band g_bandList[] =
     /* FM */ { 6400, 10800, 8400, 1, 0 },
 };
 
-const uint16_t SWSubBands[] PROGMEM =
+//SW sub-bands: broadcast and amateur (up to 10m, IARU region 2), sorted by frequency.
+//Ranges are in KHz and half-open: [low, high). Edit here to adjust them.
+struct SWSubBand
 {
-    SW_LIMIT_LOW,  // 160 Meter
-    3500, // 80 Meter
-    4500, 
-    5600,
-    6800, // 40 Meter
-    7200, // 41 Meter
-    8500, 
-    10000, // 30 Meter
-    11200,
-    13400, 
-    14000, // 20 Meter
-    15000,
-    17200, 
-    18000, // 17 Meter
-    21000, // 15 Meter
-    21400, // 13 Meter
-    24890, // 12 Meter
-    CB_LIMIT_LOW, // CB Band (11 Meter)
-    CB_LIMIT_HIGH  // 10 Meter
+    uint16_t low;
+    uint16_t high;
 };
-const uint8_t g_SWSubBandCount = sizeof(SWSubBands) / sizeof(uint16_t);
+
+#define HAM 0x8000 //Flag in "low": amateur band, SSB is selected automatically there
+
+const SWSubBand g_swSubBands[] PROGMEM =
+{
+    {  HAM | 1800,  2000 }, //  0: 160m HAM
+    {  2300,  2495 }, //  1: 120m
+    {  3200,  3400 }, //  2:  90m
+    {  HAM | 3500,  3900 }, //  3:  80m HAM
+    {  3900,  4000 }, //  4:  75m
+    {  4750,  5060 }, //  5:  60m
+    {  5900,  6200 }, //  6:  49m
+    {  HAM | 7000,  7300 }, //  7:  40m HAM
+    {  7300,  7450 }, //  8:  41m
+    {  9400,  9900 }, //  9:  31m
+    { HAM | 10100, 10150 }, // 10:  30m HAM
+    { 11600, 12100 }, // 11:  25m
+    { 13570, 13870 }, // 12:  22m
+    { HAM | 14000, 14350 }, // 13:  20m HAM
+    { 15100, 15800 }, // 14:  19m
+    { 17480, 17900 }, // 15:  16m
+    { HAM | 18068, 18168 }, // 16:  17m HAM
+    { 18900, 19020 }, // 17:  15m
+    { HAM | 21000, 21450 }, // 18:  15m HAM
+    { 21450, 21850 }, // 19:  13m
+    { HAM | 24890, 24990 }, // 20:  12m HAM
+    { 25670, 26100 }, // 21:  11m
+    { HAM | 28000, 29700 }, // 22:  10m HAM
+};
+const uint8_t g_SWSubBandCount = sizeof(g_swSubBands) / sizeof(SWSubBand);
+
+#define SSB_LSB_LIMIT 10000 //Amateur bands below this frequency use LSB, above - USB
+
+//Last frequency used in each sub-band (0 - not set)
+uint16_t g_swLastFreq[g_SWSubBandCount];
 const uint8_t g_lastBand = (sizeof(g_bandList) / sizeof(Band)) - 1;
 int8_t g_bandIndex = 1;
 
