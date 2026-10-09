@@ -31,7 +31,7 @@ const unsigned char ttable[6][4] = {
 #define R_CCW_FINAL 0x5
 #define R_CCW_NEXT  0x6
 
-const unsigned char ttable[7][4] = 
+const unsigned char ttable[7][4] PROGMEM = 
 {
   // R_START
   {R_START, R_CW_BEGIN, R_CCW_BEGIN, R_START},
@@ -73,7 +73,7 @@ unsigned char Rotary::process()
 	// Grab state of input pins
 	unsigned char pinstate = ((PIND & (1 << 3)) >> 2) | ((PIND & (1 << 2)) >> 2);
 	// Determine new state from the pins and state table
-	state = ttable[state & 0xf][pinstate];
+	state = pgm_read_byte(&ttable[state & 0xf][pinstate]);
 	// Return emit bits, ie the generated event
 	return state & 0x30;
 }

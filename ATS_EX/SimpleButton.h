@@ -84,7 +84,8 @@ Note that the values are somewhat bitcoded:
 class SimpleButton
 {
   public:
-    SimpleButton(uint8_t pin);
+    //Constant initialization only, pin must be configured as input with pull-up by the application
+    constexpr SimpleButton(uint8_t pin) : _PinDebounceState((uint16_t)pin << 10) {}
     uint8_t checkEvent(uint8_t (*_event)(uint8_t event, uint8_t pin) = NULL);
   private:
     uint16_t _PinDebounceState;

@@ -35,6 +35,14 @@ void oledPrint(uint16_t u, int offX = -1, int offY = -1, const DCfont* font = La
         oled.invertOutput(false);
 }
 
+//Same as oledPrint but text is stored in flash (PROGMEM), max 16 chars. Saves RAM
+void oledPrintP(PGM_P text, int offX = -1, int offY = -1, const DCfont* font = LastFont, bool invert = false)
+{
+    char buf[17];
+    strcpy_P(buf, text);
+    oledPrint(buf, offX, offY, font, invert);
+}
+
 //Faster alternative for convertToChar
 void utoa(char* out, uint16_t num)
 {

@@ -1,6 +1,6 @@
 #pragma once
 
-long g_storeTime = millis();
+uint32_t g_storeTime = 0;
 
 bool g_voltagePinConnnected = false;
 bool g_ssbLoaded = false;
@@ -46,10 +46,10 @@ enum SettingType
     SwitchAuto
 };
 
+//Constant part of a setting (kept in flash). Its value lives in g_settingParam
 struct SettingsItem
 {
-    char name[5];
-    int8_t param;
+    char name[4];
     uint8_t type;
     void (*manipulateCallback)(int8_t);
 };
@@ -73,29 +73,29 @@ void doUnitsSwitch(int8_t v = 0);
 void doScanSwitch(int8_t v = 0);
 void doCWSwitch(int8_t v = 0);
 
-SettingsItem g_Settings[] =
+const SettingsItem g_Settings[] PROGMEM =
 {
     //Page 1
-    { "ATT", 0,  SettingType::ZeroAuto,     doAttenuation     },  //Attenuation
-    { "SM ", 0,  SettingType::Num,          doSoftMute        },  //Soft Mute
-    { "SVC", 1,  SettingType::Switch,       doSSBAVC          },  //SSB AVC Switch
-    { "Syn", 0,  SettingType::Switch,       doSync            },  //SSB Sync
-    { "DeE", 1,  SettingType::Switch,       doDeEmp           },  //FM DeEmphasis (0 - 50, 1 - 75)
-    { "AVC", 46, SettingType::Num,          doAvc             },  //Automatic Volume Control
+    { "ATT", SettingType::ZeroAuto,     doAttenuation     },  //Attenuation
+    { "SM ", SettingType::Num,          doSoftMute        },  //Soft Mute
+    { "SVC", SettingType::Switch,       doSSBAVC          },  //SSB AVC Switch
+    { "Syn", SettingType::Switch,       doSync            },  //SSB Sync
+    { "DeE", SettingType::Switch,       doDeEmp           },  //FM DeEmphasis (0 - 50, 1 - 75)
+    { "AVC", SettingType::Num,          doAvc             },  //Automatic Volume Control
     //Page 2
-    { "Scr", 80, SettingType::Num,          doBrightness      },  //Screen Brightness
-    { "SW ", 0,  SettingType::Switch,       doSWUnits         },  //SW Units
-    { "SSM", 1,  SettingType::Switch,       doSSBSoftMuteMode },  //SSB Soft Mute Mode
-    { "COF", 0,  SettingType::SwitchAuto,   doCutoffFilter    },  //SSB Cutoff Filter
-    { "CPU", 0,  SettingType::Switch,       doCPUSpeed        },  //CPU Frequency
+    { "Scr", SettingType::Num,          doBrightness      },  //Screen Brightness
+    { "SW ", SettingType::Switch,       doSWUnits         },  //SW Units
+    { "SSM", SettingType::Switch,       doSSBSoftMuteMode },  //SSB Soft Mute Mode
+    { "COF", SettingType::SwitchAuto,   doCutoffFilter    },  //SSB Cutoff Filter
+    { "CPU", SettingType::Switch,       doCPUSpeed        },  //CPU Frequency
 #if USE_RDS
-    { "RDS", 1,  SettingType::Num,          doRDSErrorLevel   },  //RDS ErrorLevel
+    { "RDS", SettingType::Num,          doRDSErrorLevel   },  //RDS ErrorLevel
 #endif
     //Page 3
-    { "BFO", 0,  SettingType::Num,          doBFOCalibration  },  //BFO Offset calibration
-    { "Uni", 1,  SettingType::Switch,       doUnitsSwitch     },  //Show/Hide frequency units
-    { "Sca", 1,  SettingType::Switch,       doScanSwitch      },  //AM Encoder scan switch
-    { "CW ", 0,  SettingType::Switch,       doCWSwitch        },  //CW is LSB or USB
+    { "BFO", SettingType::Num,          doBFOCalibration  },  //BFO Offset calibration
+    { "Uni", SettingType::Switch,       doUnitsSwitch     },  //Show/Hide frequency units
+    { "Sca", SettingType::Switch,       doScanSwitch      },  //AM Encoder scan switch
+    { "CW ", SettingType::Switch,       doCWSwitch        },  //CW is LSB or USB
 };
 
 enum SettingsIndex
@@ -121,6 +121,29 @@ enum SettingsIndex
     SETTINGS_MAX
 };
 
+//Setting values (default values here, same order as g_Settings)
+int8_t g_settingParam[SettingsIndex::SETTINGS_MAX] =
+{
+    0,  //ATT
+    0,  //SoftMute
+    1,  //SVC
+    0,  //Sync
+    1,  //DeEmp
+    46, //AutoVolControl
+    80, //Brightness
+    0,  //SWUnits
+    1,  //SSM
+    0,  //CutoffFilter
+    0,  //CPUSpeed
+#if USE_RDS
+    1,  //RDSError
+#endif
+    0,  //BFO
+    1,  //UnitsSwitch
+    1,  //ScanSwitch
+    0,  //CWSwitch
+};
+
 const uint8_t g_SettingsMaxPages = 3;
 int8_t g_SettingSelected = 0;
 int8_t g_SettingsPage = 1;
@@ -130,11 +153,16 @@ bool g_SettingEditing = false;
 struct Bandwidth
 {
     uint8_t idx;      //Internal SI473X index
-    const char* desc;
+    char desc[5];
 };
 
+inline uint8_t getBwIdx(const Bandwidth* table, uint8_t i)
+{
+    return pgm_read_byte(&table[i].idx);
+}
+
 int8_t g_bwIndexSSB = 4;
-Bandwidth g_bandwidthSSB[] =
+const Bandwidth g_bandwidthSSB[] PROGMEM =
 {
     { 4, "0.5k" },
     { 5, "1.0k" },
@@ -147,7 +175,7 @@ const uint8_t g_bwSSBMaxIdx = 5;
 
 int8_t g_bwIndexAM = 4;
 const uint8_t g_maxFilterAM = 6;
-Bandwidth g_bandwidthAM[] =
+const Bandwidth g_bandwidthAM[] PROGMEM =
 {
     { 4, "1.0k" }, // 0
     { 5, "1.8k" }, // 1
@@ -159,7 +187,7 @@ Bandwidth g_bandwidthAM[] =
 };
 
 int8_t g_bwIndexFM = 0;
-char* g_bandwidthFM[] =
+const char g_bandwidthFM[][5] PROGMEM =
 {
     "AUTO",
     "110k",
@@ -230,9 +258,9 @@ char g_rdsPrevLen = 0;
 char* g_RDSCells[3];
 #endif
 
-char _literal_EmptyLine[17] = "                ";
+const char g_emptyLine[] PROGMEM = "                ";
 
-char* bandTags[] =
+const char bandTags[][3] PROGMEM =
 {
     "LW",
     "MW",
@@ -248,7 +276,7 @@ Band g_bandList[] =
     /* FM */ { 6400, 10800, 8400, 1, 0 },
 };
 
-uint16_t SWSubBands[] =
+const uint16_t SWSubBands[] PROGMEM =
 {
     SW_LIMIT_LOW,  // 160 Meter
     3500, // 80 Meter
@@ -284,7 +312,7 @@ enum Modulations : uint8_t
     FM
 };
 volatile uint8_t g_currentMode = FM;
-const char* g_bandModeDesc[] = 
+const char g_bandModeDesc[][4] PROGMEM =
 { 
     "AM ",
     "LSB",

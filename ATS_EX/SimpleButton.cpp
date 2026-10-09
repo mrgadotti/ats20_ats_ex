@@ -18,28 +18,6 @@
 //#define BUTTONSTATE_2DEBOUNCE     7
 
 
-SimpleButton::SimpleButton(uint8_t pin)
-{
-  //pinMode(pin, INPUT_PULLUP);
-    if (pin < 8)
-    {
-        DDRD &= ~(1 << pin);
-        PORTD |= (1 << pin);
-    }
-    else if (pin < 14)
-    {
-        DDRB &= ~(1 << (pin - 8));
-        PORTB |= (1 << (pin - 8));
-    }
-    else
-    {
-        DDRC &= ~(1 << (pin - 14));
-        PORTC |= (1 << (pin - 14));
-    }
-  _PinDebounceState = ((uint16_t)pin << 10);
-}
-
-
 uint8_t SimpleButton::checkEvent(uint8_t (*_event)(uint8_t event, uint8_t pin)) 
 {
     uint8_t ret = 0;
