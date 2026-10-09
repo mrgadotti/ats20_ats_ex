@@ -38,7 +38,7 @@ ATS_EX is created by **Goshante**, based on **PU2CLR** firmware and inspired by 
  - Adjustable **screen brightness**.
  - Adjustable **CPU Frequency** for power saving purposes and reducing interference.
  - Added **Mute button** and **Display on/off button**.
- - Added **Battery charge status** (Requires simple physical mod: Make **voltage divider** from two 10 KOhm resistors and solder it's middle output to **A2** pin)
+ - Added **Battery charge status** (Requires simple physical mod: Make **voltage divider** from a **10 KOhm** and a **2.7 KOhm** resistor and solder it's middle output to **A2** pin)
  - Added **S-Meter**
  - **Atm328p controller is now running on it's full clock**. Controls have to be more responsive. (Don't know how it impacts on battery drain.)
  - Code refactoring, optimizations
@@ -161,4 +161,4 @@ Navigate in settings with **Encoder Rotation**, confirm selection with **Encoder
 
 # How to make the battery charge level display?
 
-You will need a soldering iron and two resistors of **10kΩ** each. Solder one resistor to the negative (ground) and the other directly to the positive of the lithium battery. Then solder their meeting point together; this will be their midpoint. You need to solder it to pin **A2** on the controller. Thus, half of the battery voltage will be applied to it. By making such a simple modification, the **ATX_EX** firmware will automatically detect the connected battery voltage pin and start displaying the charge.
+You will need a soldering iron and two resistors: **10kΩ** and **2.7kΩ**. Solder the 2.7kΩ resistor to the negative (ground) and the 10kΩ resistor directly to the positive of the lithium battery. Then solder their meeting point together; this will be their midpoint. You need to solder it to pin **A2** on the controller. Thus, about 21% of the battery voltage will be applied to it (0.89V at 4.2V), which fits the ADC internal 1.1V reference used by the firmware. If you use other resistors, update `BATTERY_DIVIDER_TOP_OHM` and `BATTERY_DIVIDER_BOTTOM_OHM` in `ATS_EX/defs.h`; the top resistor must be at least about 2.8 times the bottom one so the pin stays below 1.1V at full charge. By making such a simple modification, the **ATX_EX** firmware will automatically detect the connected battery voltage pin and start displaying the charge.
